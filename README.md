@@ -114,7 +114,7 @@ technical choice (including the ones that got reversed after real testing) lives
 | --- | --- |
 | Agent orchestration | [LangGraph](https://github.com/langchain-ai/langgraph) - hand-rolled tool-calling graphs |
 | LLM access | [LangChain](https://github.com/langchain-ai/langchain) both local and cloud connections supported |
-| Vector store | [Chroma](https://github.com/chroma-core/chroma) (embedded, no separate server) |
+| Vector store | [Chroma](https://github.com/chroma-core/chroma), via a single shared `chroma run` server |
 | Embeddings | `BAAI/bge-small-en-v1.5` via `sentence-transformers` |
 | Long-term memory | [LangMem](https://github.com/langchain-ai/langmem) |
 | Transcription | `openai-whisper` |
@@ -227,7 +227,9 @@ write these yourself, just edit the values you want to change.
 #### **rag_index** - vault indexing (Module F)
 | Key | Default | What it does |
 | --- | --- | --- |
-| `persist_directory` | `./chroma` | Where the vector store lives. |
+| `persist_directory` | `./chroma` | Where the Chroma *server* persists its data (passed to `chroma run --path`) - not read directly by the Python client anymore. |
+| `chroma_host` / `chroma_port` | `127.0.0.1` / `8601` | Where the shared Chroma server (a sibling process, see `start.ps1`) is listening. |
+| `chroma_connect_retries` / `chroma_connect_retry_delay_seconds` | `10` / `1.0` | How long to retry connecting if the server hasn't finished starting yet. |
 | `collection_name` | `vault` | Chroma collection name. |
 | `embedding_model_name` | `BAAI/bge-small-en-v1.5` | Same model used for vault search as for memory. |
 | `chunk_size` / `chunk_overlap` | `1000` / `150` | Text-splitting parameters for indexing. |
@@ -247,11 +249,15 @@ write these yourself, just edit the values you want to change.
 .\start.ps1
 ```
 
-Starts both the chat app and the RAG indexer (`python -m kathrena.rag_index`) together, since the
-vault needs to actually be indexed for `search_vault` to find anything. `Ctrl+C` stops both.
+Starts the Chroma server, the chat app, and the RAG indexer together, since the vault needs to
+actually be indexed for `search_vault` to find anything - all three talk to the same Chroma
+server over HTTP, rather than each opening their own embedded client (see the Decisions Log's
+Round 33 for why that didn't work). `Ctrl+C` stops all three.
 
 To run just the chat app on its own (e.g. with `-w` for auto-reload on code changes, which
-`start.ps1` doesn't pass through):
+`start.ps1` doesn't pass through) - note it still needs the Chroma server reachable, so run
+`.venv\Scripts\chroma.exe run --path ./chroma --host 127.0.0.1 --port 8601` first if you're not
+using `start.ps1`:
 
 ```powershell
 .venv\Scripts\chainlit.exe run src/kathrena/chat_interface/app.py -w

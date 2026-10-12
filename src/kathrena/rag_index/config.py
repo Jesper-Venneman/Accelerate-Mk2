@@ -23,13 +23,32 @@ class RagIndexConfig:
     vault_root: Path = field(default_factory=lambda: setting_path("common", "vault_root", "."))
 
     # Local runtime data (Architecture/Architecture Overview.md#Runtime architecture) - both
-    # already covered by .gitignore.
+    # already covered by .gitignore. Read by the Chroma server process (`chroma run --path ...`,
+    # see start.ps1), not by ChromaVectorStore itself (Decisions Log Round 33).
     persist_directory: Path = field(
         default_factory=lambda: setting_path("rag_index", "persist_directory", "./chroma")
     )
     checkpoint_path: Path = field(
         default_factory=lambda: setting_path(
             "rag_index", "checkpoint_path", "./data/rag_index_checkpoints.sqlite"
+        )
+    )
+
+    # Where the Chroma *server* (a sibling process, see start.ps1) is listening - ChromaVectorStore
+    # connects to it over HTTP rather than opening its own embedded client (Decisions Log Round
+    # 33), so every process sharing this vault sees the same, live vector index.
+    chroma_host: str = field(
+        default_factory=lambda: setting_str("rag_index", "chroma_host", "127.0.0.1")
+    )
+    chroma_port: int = field(default_factory=lambda: setting_int("rag_index", "chroma_port", 8601))
+    # The server may still be starting up when a client process races against it (start.ps1 launches
+    # all of them at once) - retry briefly rather than failing hard on the first attempt.
+    chroma_connect_retries: int = field(
+        default_factory=lambda: setting_int("rag_index", "chroma_connect_retries", 10)
+    )
+    chroma_connect_retry_delay_seconds: float = field(
+        default_factory=lambda: setting_float(
+            "rag_index", "chroma_connect_retry_delay_seconds", 1.0
         )
     )
 

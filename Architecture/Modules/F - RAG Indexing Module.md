@@ -7,7 +7,11 @@ Keeps a searchable, up-to-date index of the vault for [G - Kathrena Agent Core](
 ## Implementation approach
 Uses LangChain's components (text splitters, embeddings interface, vector store integration) for the chunk/embed/upsert/retrieve plumbing - LangGraph has no RAG tooling of its own, it's purely an orchestration layer. The indexing run itself is orchestrated as a LangGraph graph, the same framework backing [G - Kathrena Agent Core](G%20-%20Kathrena%20Agent%20Core.md), [H - Change Proposal and Approval Gate](H%20-%20Change%20Proposal%20and%20Approval%20Gate.md), and [I - Project Management Modules](I%20-%20Project%20Management%20Modules.md), so a large or interrupted re-index can resume from its last checkpoint instead of restarting.
 
-Vector store: **Chroma** (embedded, no server process). Embedding model: **BAAI/bge-small-en-v1.5** (local via `sentence-transformers`). Both free/local, no paid tiers - see [Decisions Log](../Decisions%20Log.md).
+Vector store: **Chroma**, reached over HTTP via a single shared `chroma run` server process rather
+than each process (the chat app, this module's indexer) embedding its own client - two independent
+embedded clients pointed at the same files didn't reliably see each other's writes (Decisions Log
+Round 33). Embedding model: **BAAI/bge-small-en-v1.5** (local via `sentence-transformers`). Both
+free/local, no paid tiers - see [Decisions Log](../Decisions%20Log.md).
 
 ## Fallback options
 If Chroma or bge-small-en-v1.5 don't work out (performance, storage limits, or a future local LLM runtime choice that changes the calculus), these were the other free/local candidates considered:

@@ -338,3 +338,30 @@ notes below for findings that changed the plan mid-sketch.
 - **Log rotation:** `logging.handlers.TimedRotatingFileHandler(when="midnight", backupCount=10)` -
   one file per calendar day, unlimited size within a day, last 10 days kept automatically, by
   request. Plain text, one shared file (`data/logs/llm_calls.log`) for every labeled role.
+
+## Round 33
+- **Real bug found in production use:** after the RAG indexer picked up a newly-added vault file,
+  `search_vault` couldn't find it until the chat app was restarted - then it worked instantly.
+  Root cause: the chat app and the indexer are two independent OS processes (`start.ps1`), and
+  each previously opened its own embedded Chroma `PersistentClient` pointed at the same
+  `persist_directory`. A long-lived client in one process doesn't see writes a *different*
+  process made to the same on-disk files - only a fresh client, built after a restart, re-reads
+  from disk and sees them.
+- **Fix: a single shared `chroma run` server process**, with both the chat app and the indexer
+  connecting to it via `chromadb.HttpClient` instead of each embedding their own client. One
+  authoritative process owns the actual index state; everyone else is just a client of it - the
+  textbook-correct shape for "multiple processes need to share one vector index live", not a
+  workaround. `start.ps1` now launches the server first, with a short head start before its
+  clients (the chat app, the indexer) start trying to connect.
+- **Two alternatives considered and rejected:** merging the indexer's watcher into the chat app
+  process itself (same process, background task, like push-to-talk) would also fix it - no
+  cross-process visibility problem if there's only one `ChromaVectorStore` instance - but reverses
+  the deliberate choice that the voice-log pipeline and F's watcher stay independent of the live
+  chat agent, needing only disk access to the vault. A narrower patch (reconnect a fresh client
+  per `search()` call, keeping the embedding model cached) was also considered - cheaper to write,
+  but doesn't fix the actual multi-process model, just papers over this one symptom.
+- **Connection retry, not a hard failure on first attempt:** since `start.ps1` launches the server
+  and its clients together, a client can easily try to connect before the server's finished
+  starting up. `ChromaVectorStore` retries (`rag_index.chroma_connect_retries`, default 10, 1s
+  apart) and calls `.heartbeat()` to confirm the server's actually responsive, not just that the
+  port happened to accept a TCP connection.

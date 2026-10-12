@@ -192,7 +192,7 @@ async def on_chat_start() -> None:
     else:
         await cl.Message(
             content=(
-                f"Hi, I'm {_agent_config.agent_name}. Ask me about your projects, ask me to update a note, "
+                f"Hi, I'm {_agent_config.agent_name}. Ask me about your projects, "
                 f"or hold {_push_to_talk_config.hotkey_name} to talk to me."
             )
         ).send()

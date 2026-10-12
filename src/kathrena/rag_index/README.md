@@ -29,7 +29,9 @@ to at least set the vault path. Common overrides, in `data/settings.yaml`:
 | Settings key | Default | Purpose |
 | --- | --- | --- |
 | `common.vault_root` | `.` | Path to your Obsidian vault |
-| `rag_index.persist_directory` | `./chroma` | Where the Chroma DB is persisted |
+| `rag_index.persist_directory` | `./chroma` | Where the Chroma server persists its data - passed to `chroma run --path` |
+| `rag_index.chroma_host` / `rag_index.chroma_port` | `127.0.0.1` / `8601` | Where the Chroma server (a sibling process, see `start.ps1`) is listening |
+| `rag_index.chroma_connect_retries` / `rag_index.chroma_connect_retry_delay_seconds` | `10` / `1.0` | How long to keep retrying the connection if the server hasn't finished starting yet |
 | `rag_index.checkpoint_path` | `./data/rag_index_checkpoints.sqlite` | LangGraph checkpoint DB, enables resuming an interrupted full index |
 | `rag_index.collection_name` | `vault` | Chroma collection name |
 | `rag_index.embedding_model_name` | `BAAI/bge-small-en-v1.5` | Hugging Face embedding model (downloaded on first use) |
@@ -41,6 +43,14 @@ folder's frontmatter (`{Folder}/{Folder}.md`) - opting out a project folder opts
 nested under it.
 
 ## Run
+
+Needs a Chroma server running first (`start.ps1` does this for you - see the top-level README):
+
+```powershell
+.venv\Scripts\chroma.exe run --path ./chroma --host 127.0.0.1 --port 8601
+```
+
+Then, in another terminal:
 
 ```powershell
 .venv\Scripts\python.exe -m kathrena.rag_index

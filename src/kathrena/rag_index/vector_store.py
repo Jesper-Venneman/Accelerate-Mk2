@@ -34,19 +34,43 @@ class VectorStore(Protocol):
 
 
 class ChromaVectorStore:
-    """Default `VectorStore`: an embedded Chroma collection."""
+    """Default `VectorStore`: a Chroma collection reached over HTTP via a shared server process."""
 
     def __init__(self, config: RagIndexConfig) -> None:
         # Imported lazily so importing this module doesn't require chromadb/sentence-transformers
         # unless a ChromaVectorStore is actually constructed.
+        import time
+
+        import chromadb
         from langchain_chroma import Chroma
         from langchain_huggingface import HuggingFaceEmbeddings
 
         embeddings = HuggingFaceEmbeddings(model_name=config.embedding_model_name)
+
+        # The server may still be starting up when this races against it (start.ps1 launches the
+        # server and its clients together) - retry briefly instead of failing on the first attempt.
+        client = None
+        last_error: Exception | None = None
+        for _attempt in range(config.chroma_connect_retries):
+            try:
+                candidate = chromadb.HttpClient(host=config.chroma_host, port=config.chroma_port)
+                candidate.heartbeat()
+                client = candidate
+                break
+            except Exception as exc:
+                last_error = exc
+                time.sleep(config.chroma_connect_retry_delay_seconds)
+        if client is None:
+            raise ConnectionError(
+                f"Could not reach the Chroma server at {config.chroma_host}:{config.chroma_port} "
+                f"after {config.chroma_connect_retries} attempt(s) - is `chroma run` (see "
+                "start.ps1) actually running?"
+            ) from last_error
+
         self._store = Chroma(
+            client=client,
             collection_name=config.collection_name,
             embedding_function=embeddings,
-            persist_directory=str(config.persist_directory),
         )
 
     def upsert(self, doc_id: str, chunks: list[str], metadata: dict[str, str]) -> None:
