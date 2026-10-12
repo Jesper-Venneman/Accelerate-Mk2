@@ -18,6 +18,11 @@ cases...).
 Below you can find more information about the current features in the project, and the designs.
 You're free to use this project yourself, either 1:1 or as a basis to build something for yourself.
 
+## Demo
+Note: Audio might be muted by default.
+
+https://github.com/user-attachments/assets/bd796e07-ce28-4d8a-ae03-2bb42e17f89d
+
 ## Contents
 
 - [Features](#features)
