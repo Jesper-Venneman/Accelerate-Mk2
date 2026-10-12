@@ -1,6 +1,6 @@
 # Accelerate Mk2 (Kathrena)
 
-[![CI](https://github.com/<your-username>/<repo-name>/actions/workflows/ci.yml/badge.svg)](https://github.com/<your-username>/<repo-name>/actions/workflows/ci.yml)
+[![CI](https://github.com/Jesper-Venneman/Accelerate-Mk2/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/Jesper-Venneman/Accelerate-Mk2/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue)
 
