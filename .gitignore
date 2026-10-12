@@ -1,0 +1,21 @@
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.env
+.pytest_cache/
+.ruff_cache/
+dist/
+build/
+
+# Local runtime data - vector stores, checkpoints, model caches (Architecture/Architecture Overview.md#Runtime architecture)
+*.sqlite
+*.sqlite3
+/data/
+
+# Personal publishing notes - not meant for the public repo
+/Publishing Checklist.md
+/chroma/
+/.chainlit/
+/.files/

@@ -1,0 +1,56 @@
+[project]
+name = "kathrena"
+version = "0.1.0"
+description = "Accelerate Mk2 - voice log pipeline and the Kathrena AI companion. See Architecture/ for the design docs."
+requires-python = ">=3.12,<3.13"
+dependencies = [
+    "langgraph>=0.2",
+    "langgraph-checkpoint-sqlite>=2.0",
+    "langchain>=0.3",
+    "langchain-openai>=0.2",
+    "langchain-chroma>=0.2",
+    "langchain-huggingface>=0.1",
+    "langchain-text-splitters>=0.3",
+    "chromadb>=0.5",
+    "sentence-transformers>=3.0",
+    "langmem>=0.0.11",
+    "openai-whisper>=20231117",
+    # For an NVIDIA GPU, install the CUDA build BEFORE this project so pip doesn't grab the
+    # CPU-only wheel first, e.g.: pip install torch --index-url https://download.pytorch.org/whl/cu130
+    # (adjust cu130 to your CUDA version). See src/kathrena/voice_log/README.md and
+    # Architecture/Decisions Log.md Round 15.
+    "torch>=2.0",
+    "watchdog>=4.0",
+    "chainlit>=1.3",
+    "pyyaml>=6.0",
+    # Push-to-talk voice input (Module G) - global hotkey listener (Decisions Log Round 18,
+    # replacing the wake-word listener from Round 17) plus microphone capture.
+    "pynput>=1.7",
+    "sounddevice>=0.4",
+    "soundfile>=0.12",
+    # Text-to-speech + voice-persona effects (Module K, Decisions Log Round 16).
+    "kokoro>=0.9.4",
+    "pedalboard>=0.9",
+    # Web search tool (Module G, Decisions Log Round 21) - DuckDuckGo has no API key/signup,
+    # matching the project's free/local-by-default preference (see Decisions Log Round 1).
+    "ddgs>=9.0",
+]
+
+# Optional: only needed if/when a task actually uses a cloud model (Decisions Log Round 10).
+[project.optional-dependencies]
+cloud = ["langchain-anthropic>=0.2"]
+dev = ["pytest>=8.0", "ruff>=0.6"]
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.ruff]
+line-length = 110
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP"]
