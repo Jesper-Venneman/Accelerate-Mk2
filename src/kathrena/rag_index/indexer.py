@@ -3,9 +3,9 @@
 Design spec: Architecture/Modules/F - RAG Indexing Module.md
 
 Orchestrated as a LangGraph graph rather than a plain loop, so a large or interrupted re-index
-can resume from its last checkpoint instead of restarting - the same durable-execution pattern
-used by `kathrena.approval_gate` (Module H). One node discovers pending files, another indexes
-one file at a time; the checkpointer persists `pending`/`indexed_count` after every step.
+can resume from its last checkpoint instead of restarting. One node discovers pending files, a
+nother indexes one file at a time; the checkpointer persists `pending`/`indexed_count` after every
+step.
 """
 
 from __future__ import annotations

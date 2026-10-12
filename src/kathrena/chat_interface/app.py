@@ -3,9 +3,7 @@
 Design spec: Architecture/Modules/K - Chat Interface.md
 
 Wires Chainlit's chat UI directly to Kathrena's agent graph (Module G) in-process - no separate
-API server, per Architecture Overview.md#Runtime architecture. Approve/Reject/Edit buttons on a
-staged proposal call back into `kathrena.approval_gate` (Module H)'s `resolve_change`, matching
-its `interrupt()`/`Command(resume=...)` design.
+API server, per Architecture Overview.md#Runtime architecture.
 
 Voice input: a `PushToTalkListener` (Module G) runs as a background task scoped to this Chainlit
 session - starts in `on_chat_start`, stops in `on_chat_end`. Hold the configured hotkey to talk;
@@ -35,7 +33,6 @@ from kathrena.agent_core.graph import load_thread_messages, run_turn
 from kathrena.agent_core.push_to_talk.config import PushToTalkConfig
 from kathrena.agent_core.push_to_talk.listener import PushToTalkListener
 from kathrena.agent_core.web_search import DuckDuckGoWebSearch, WebSearchConfig
-from kathrena.approval_gate import ApprovalGateConfig, Decision, Resolution, proposal_actions, resolve_change
 from kathrena.chat_interface.audio import to_wav_bytes
 from kathrena.chat_interface.config import VoiceOutputConfig
 from kathrena.chat_interface.voice_effects import NullVoiceEffects, PedalboardVoiceEffects
@@ -61,9 +58,6 @@ for _noisy_logger in ("httpx", "sentence_transformers", "huggingface_hub"):
 # Build module-level singletons for the agent, tools, and configurations:
 ## Agent Core
 _agent_config = AgentCoreConfig()
-
-## Approval Gate
-_approval_config = ApprovalGateConfig()
 
 ## Vector Store
 _vector_store = ChromaVectorStore(RagIndexConfig())
@@ -102,7 +96,7 @@ _LISTENER_TASK_KEY = "push_to_talk_task"
 
 # Names of LangGraph's own internal per-node "chain" runs (Module G's graph.py node names, plus
 # its conditional-edge router and the graph itself) - without this, Chainlit's tracer renders each
-# one as its own "thinking" step showing the raw AgentState dict (messages/pending_reviews) as
+# one as its own "thinking" step showing the raw AgentState dict (messages) as
 # input, which is redundant noise next to the already-clean nested tool/llm steps. Verified by
 # probing run_turn with a plain callback handler logging on_chain_start's run name/type.
 _CHAIN_STEPS_TO_IGNORE = [*DEFAULT_TO_IGNORE, 
@@ -129,7 +123,6 @@ async def _handle_turn(user_text: str, thread_id: str, *, speak: bool) -> None:
         result = await cl.make_async(run_turn)(
             AgentCoreConfig(),  # fetched fresh each turn so e.g. tool_profiles are hot-swappable
             _vector_store,
-            _approval_config,
             thread_id,
             user_text,
             memory_provider=_memory_provider,
@@ -145,17 +138,6 @@ async def _handle_turn(user_text: str, thread_id: str, *, speak: bool) -> None:
         clip = await cl.make_async(_voice_effects.apply)(clip)
         elements = [cl.Audio(name="kathrena-reply.wav", content=to_wav_bytes(clip), auto_play=True)]
     await cl.Message(content=result.reply, elements=elements).send()
-
-    # Handle any pending reviews after the main response has been sent.
-    for review in result.pending_reviews:
-        diff_block = review.diff or "(new file, no prior content)"
-        await cl.Message(
-            content=(
-                f"**Proposed change to `{review.target_path}`** (by {review.proposer})\n"
-                f"> {review.description}\n\n```diff\n{diff_block}\n```"
-            ),
-            actions=proposal_actions(review.thread_id),
-        ).send()
 
 
 async def _consume_push_to_talk_utterances(listener: PushToTalkListener, thread_id: str) -> None:
@@ -248,32 +230,3 @@ async def on_chat_end() -> None:
 async def on_message(message: cl.Message) -> None:
     thread_id = cl.user_session.get(_THREAD_ID_KEY)
     await _handle_turn(message.content, thread_id, speak=False)
-
-
-@cl.action_callback("resolve_proposal")
-async def on_resolve_proposal(action: cl.Action) -> None:
-    thread_id = action.payload["thread_id"]
-    decision = Decision(action.payload["decision"])
-    await action.remove()
-
-    if decision is Decision.EDIT:
-        response = await cl.AskUserMessage(
-            content="What should the content be instead?", timeout=300
-        ).send()
-        if not response:
-            await cl.Message(content="No edit provided - proposal left pending.").send()
-            return
-        resolution = Resolution(Decision.EDIT, edited_content=response["output"])
-    else:
-        resolution = Resolution(decision)
-
-    try:
-        outcome = await cl.make_async(resolve_change)(_approval_config, thread_id, resolution)
-    except ValueError as exc:
-        await cl.Message(content=f"Couldn't resolve that proposal: {exc}").send()
-        return
-
-    if outcome.written_path is not None:
-        await cl.Message(content=f"Done - wrote `{outcome.written_path}`.").send()
-    else:
-        await cl.Message(content="Proposal rejected - nothing written.").send()

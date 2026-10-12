@@ -1,12 +1,11 @@
 # Chat Interface (Module K)
 
-The actual surface where you talk to Kathrena ([[G - Kathrena Agent Core]]), hear her talk back,
-and review proposals from [[H - Change Proposal and Approval Gate]]. Built on **Chainlit** - see
-`Architecture/Modules/K - Chat Interface.md` for the design spec.
+The actual surface where you talk to Kathrena (Module G) and hear her talk back. Built on
+**Chainlit** - see `Architecture/Modules/K - Chat Interface.md` for the design spec.
 
 Voice input (a push-to-talk hotkey) and voice output (Kokoro text-to-speech + a voice-persona
 effects stage) are both wired in - see `Architecture/Decisions Log.md` Rounds 16 and 18. Long-term
-memory ([[J - Memory Module]]) is also wired in - see `Architecture/Decisions Log.md` Round 19.
+memory (Module J) is also wired in - see `Architecture/Decisions Log.md` Round 19.
 
 ## Install
 
@@ -18,8 +17,8 @@ those modules' READMEs.
 
 ## Configure
 
-Mostly composes other modules' own configs directly (`AgentCoreConfig`, `ApprovalGateConfig`,
-`RagIndexConfig`, `PushToTalkConfig` - see their own READMEs for settings keys). Set
+Mostly composes other modules' own configs directly (`AgentCoreConfig`, `RagIndexConfig`,
+`PushToTalkConfig` - see their own READMEs for settings keys). Set
 `common.vault_root` and, if your TextGen server isn't on the default port, `llm_profiles.local`
 in `data/settings.yaml` (see `kathrena.llm`).
 
@@ -55,18 +54,13 @@ Opens at [http://localhost:8000](http://localhost:8000). `-w` auto-reloads on co
 - When a turn came in via push-to-talk, Kathrena's reply is also spoken (Kokoro +
   the voice-persona effects) and attached as an auto-playing audio element. Typed questions get a
   typed (silent) answer.
-- When Kathrena proposes a vault edit, a message with **Approve/Edit/Reject** buttons appears
-  showing the diff. Edit prompts for replacement content before resolving. Approve/Edit write
-  through `kathrena.approval_gate.resolve_change`; Reject discards it - nothing is ever written
-  without one of these being clicked.
 
 ## Test
 
 There's no dedicated test suite for `app.py` itself - it's a thin wiring layer with no logic of
 its own (config composition + Chainlit event handlers that delegate straight to
-`kathrena.agent_core.run_turn` and `kathrena.approval_gate.resolve_change`, both already tested in
-`tests/agent_core` and `tests/approval_gate`). Sanity-check it by actually running it (see Run,
-above) against a real TextGen server.
+`kathrena.agent_core.run_turn`, already tested in `tests/agent_core`). Sanity-check it by actually
+running it (see Run, above) against a real TextGen server.
 
 ## Lint
 

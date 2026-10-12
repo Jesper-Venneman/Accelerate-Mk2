@@ -244,6 +244,16 @@ write these yourself, just edit the values you want to change.
 ### Run
 
 ```powershell
+.\start.ps1
+```
+
+Starts both the chat app and the RAG indexer (`python -m kathrena.rag_index`) together, since the
+vault needs to actually be indexed for `search_vault` to find anything. `Ctrl+C` stops both.
+
+To run just the chat app on its own (e.g. with `-w` for auto-reload on code changes, which
+`start.ps1` doesn't pass through):
+
+```powershell
 .venv\Scripts\chainlit.exe run src/kathrena/chat_interface/app.py -w
 ```
 

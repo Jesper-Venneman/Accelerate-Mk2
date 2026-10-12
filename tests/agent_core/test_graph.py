@@ -7,33 +7,31 @@ import dataclasses
 from langchain_core.messages import AIMessage, HumanMessage
 
 from kathrena.agent_core.graph import load_thread_messages, run_turn
-from kathrena.approval_gate import get_pending_review
 from kathrena.rag_index.vector_store import SearchResult
 
 
 def test_simple_reply_without_tool_calls(
-    agent_config, approval_config, fake_vector_store, scripted_chat_model
+    agent_config, fake_vector_store, scripted_chat_model
 ):
     model = scripted_chat_model([AIMessage(content="Hello there!")])
 
     result = run_turn(
-        agent_config, fake_vector_store(), approval_config, "thread-1", "hi", chat_model=model
+        agent_config, fake_vector_store(), "thread-1", "hi", chat_model=model
     )
 
     assert result.reply == "Hello there!"
-    assert result.pending_reviews == []
     assert len(model.invocations) == 1
 
 
 def test_configured_system_prompt_reaches_the_model_alongside_the_tools_description(
-    agent_config, approval_config, fake_vector_store, scripted_chat_model
+    agent_config, fake_vector_store, scripted_chat_model
 ):
     """Decisions Log Round 31 - config.system_prompt is user-editable; the tool-availability
     sentence stays hardcoded regardless, so it can't drift out of sync with actual tools."""
     custom_config = dataclasses.replace(agent_config, system_prompt="Custom personality text.")
     model = scripted_chat_model([AIMessage(content="Hello there!")])
 
-    run_turn(custom_config, fake_vector_store(), approval_config, "thread-prompt", "hi", chat_model=model)
+    run_turn(custom_config, fake_vector_store(), "thread-prompt", "hi", chat_model=model)
 
     system_message = model.invocations[-1][0]
     assert "Custom personality text." in system_message.content
@@ -41,7 +39,7 @@ def test_configured_system_prompt_reaches_the_model_alongside_the_tools_descript
 
 
 def test_search_vault_tool_is_used_before_the_final_answer(
-    agent_config, approval_config, fake_vector_store, scripted_chat_model
+    agent_config, fake_vector_store, scripted_chat_model
 ):
     store = fake_vector_store(
         [SearchResult(content="Foo is a project about bar.", source_path="Foo/Foo.md")]
@@ -57,7 +55,7 @@ def test_search_vault_tool_is_used_before_the_final_answer(
     )
 
     result = run_turn(
-        agent_config, store, approval_config, "thread-2", "what is foo?", chat_model=model
+        agent_config, store, "thread-2", "what is foo?", chat_model=model
     )
 
     assert result.reply == "Foo is a project about bar."
@@ -68,7 +66,7 @@ def test_search_vault_tool_is_used_before_the_final_answer(
 
 
 def test_read_vault_file_tool_is_used_before_the_final_answer(
-    agent_config, approval_config, fake_vector_store, scripted_chat_model
+    agent_config, fake_vector_store, scripted_chat_model
 ):
     agent_config.vault_root.mkdir(parents=True, exist_ok=True)
     (agent_config.vault_root / "Foo.md").write_text("Foo is a project about bar.", encoding="utf-8")
@@ -85,7 +83,6 @@ def test_read_vault_file_tool_is_used_before_the_final_answer(
     result = run_turn(
         agent_config,
         fake_vector_store(),
-        approval_config,
         "thread-read-file",
         "what does Foo.md say?",
         chat_model=model,
@@ -95,7 +92,7 @@ def test_read_vault_file_tool_is_used_before_the_final_answer(
 
 
 def test_reply_model_writes_the_final_answer_when_tool_and_reply_profiles_differ(
-    agent_config, approval_config, fake_vector_store, scripted_chat_model
+    agent_config, fake_vector_store, scripted_chat_model
 ):
     """When tool_profile != reply_profile, the tool-model's own draft (once it stops requesting
     tools) must never be shown - only the reply-model's own separate output should be."""
@@ -117,7 +114,6 @@ def test_reply_model_writes_the_final_answer_when_tool_and_reply_profiles_differ
     result = run_turn(
         split_config,
         store,
-        approval_config,
         "thread-split",
         "what is foo?",
         chat_model=tool_model,
@@ -130,14 +126,14 @@ def test_reply_model_writes_the_final_answer_when_tool_and_reply_profiles_differ
 
 
 def test_no_reply_model_call_when_tool_and_reply_profiles_match(
-    agent_config, approval_config, fake_vector_store, scripted_chat_model
+    agent_config, fake_vector_store, scripted_chat_model
 ):
     """The default (tool_profile == reply_profile) must behave exactly as before Round 28 - no
     extra node, no extra call."""
     model = scripted_chat_model([AIMessage(content="Hello there!")])
 
     result = run_turn(
-        agent_config, fake_vector_store(), approval_config, "thread-nosplit", "hi", chat_model=model
+        agent_config, fake_vector_store(), "thread-nosplit", "hi", chat_model=model
     )
 
     assert result.reply == "Hello there!"
@@ -145,7 +141,7 @@ def test_no_reply_model_call_when_tool_and_reply_profiles_match(
 
 
 def test_history_window_caps_what_the_live_prompt_sends(
-    agent_config, approval_config, fake_vector_store, scripted_chat_model
+    agent_config, fake_vector_store, scripted_chat_model
 ):
     """Decisions Log Round 30 - the checkpointed history keeps growing, but a small enough
     `history_window_messages` must still trim what call_model actually sends the LLM."""
@@ -153,12 +149,11 @@ def test_history_window_caps_what_the_live_prompt_sends(
     model = scripted_chat_model([AIMessage(content="first"), AIMessage(content="second")])
 
     run_turn(
-        windowed_config, fake_vector_store(), approval_config, "thread-window", "hello", chat_model=model
+        windowed_config, fake_vector_store(), "thread-window", "hello", chat_model=model
     )
     run_turn(
         windowed_config,
         fake_vector_store(),
-        approval_config,
         "thread-window",
         "hello again",
         chat_model=model,
@@ -170,11 +165,11 @@ def test_history_window_caps_what_the_live_prompt_sends(
 
 
 def test_load_thread_messages_returns_the_persisted_conversation(
-    agent_config, approval_config, fake_vector_store, scripted_chat_model
+    agent_config, fake_vector_store, scripted_chat_model
 ):
     model = scripted_chat_model([AIMessage(content="Hello there!")])
     run_turn(
-        agent_config, fake_vector_store(), approval_config, "thread-history", "hi", chat_model=model
+        agent_config, fake_vector_store(), "thread-history", "hi", chat_model=model
     )
 
     messages = load_thread_messages(agent_config, "thread-history")
@@ -188,83 +183,8 @@ def test_load_thread_messages_returns_empty_for_an_unknown_thread(agent_config):
     assert load_thread_messages(agent_config, "never-happened") == []
 
 
-# def test_propose_vault_change_tool_stages_a_review( commented out until the propose vault change tool is improved.
-#     agent_config, approval_config, fake_vector_store, scripted_chat_model
-# ):
-#     model = scripted_chat_model(
-#         [
-#             AIMessage(
-#                 content="",
-#                 tool_calls=[
-#                     {
-#                         "name": "propose_vault_change",
-#                         "args": {
-#                             "target_path": "note.md",
-#                             "new_content": "hi",
-#                             "description": "test",
-#                         },
-#                         "id": "1",
-#                     }
-#                 ],
-#             ),
-#             AIMessage(content="I've drafted that update for you."),
-#         ]
-#     )
-
-#     result = run_turn(
-#         agent_config,
-#         fake_vector_store(),
-#         approval_config,
-#         "thread-3",
-#         "update note.md",
-#         chat_model=model,
-#     )
-
-#     assert result.reply == "I've drafted that update for you."
-#     assert len(result.pending_reviews) == 1
-#     review = result.pending_reviews[0]
-#     assert review.target_path == "note.md"
-#     assert get_pending_review(approval_config, review.thread_id) == review
-
-
-# def test_pending_reviews_do_not_leak_into_a_later_turn( commented out until the propose vault change tool is improved.
-#     agent_config, approval_config, fake_vector_store, scripted_chat_model
-# ):
-#     """Regression test: pending_reviews accumulates forever in the checkpointed state (it needs
-#     `operator.add` for messages' sake), so run_turn must only surface *this turn's* new reviews."""
-#     model = scripted_chat_model(
-#         [
-#             AIMessage(
-#                 content="",
-#                 tool_calls=[
-#                     {
-#                         "name": "propose_vault_change",
-#                         "args": {
-#                             "target_path": "note.md",
-#                             "new_content": "hi",
-#                             "description": "test",
-#                         },
-#                         "id": "1",
-#                     }
-#                 ],
-#             ),
-#             AIMessage(content="Drafted."),
-#             AIMessage(content="Just chatting now, no proposal here."),
-#         ]
-#     )
-#     store = fake_vector_store()
-
-#     first = run_turn(
-#         agent_config, store, approval_config, "thread-4", "update note.md", chat_model=model
-#     )
-#     assert len(first.pending_reviews) == 1
-
-#     second = run_turn(agent_config, store, approval_config, "thread-4", "thanks!", chat_model=model)
-#     assert second.pending_reviews == []
-
-
 def test_search_memory_tool_is_used_before_the_final_answer(
-    agent_config, approval_config, fake_vector_store, fake_memory_provider, scripted_chat_model
+    agent_config, fake_vector_store, fake_memory_provider, scripted_chat_model
 ):
     memory = fake_memory_provider(["The user prefers dark mode."])
     model = scripted_chat_model(
@@ -282,7 +202,6 @@ def test_search_memory_tool_is_used_before_the_final_answer(
     result = run_turn(
         agent_config,
         fake_vector_store(),
-        approval_config,
         "thread-5",
         "what are my UI preferences?",
         memory_provider=memory,
@@ -294,7 +213,7 @@ def test_search_memory_tool_is_used_before_the_final_answer(
 
 
 def test_remember_is_scheduled_with_the_full_conversation_after_a_turn(
-    agent_config, approval_config, fake_vector_store, fake_memory_provider, scripted_chat_model
+    agent_config, fake_vector_store, fake_memory_provider, scripted_chat_model
 ):
     memory = fake_memory_provider()
     model = scripted_chat_model([AIMessage(content="Hello there!")])
@@ -302,7 +221,6 @@ def test_remember_is_scheduled_with_the_full_conversation_after_a_turn(
     run_turn(
         agent_config,
         fake_vector_store(),
-        approval_config,
         "thread-6",
         "hi",
         memory_provider=memory,
@@ -317,7 +235,7 @@ def test_remember_is_scheduled_with_the_full_conversation_after_a_turn(
 
 
 def test_remember_receives_the_whole_thread_not_just_the_latest_turn(
-    agent_config, approval_config, fake_vector_store, fake_memory_provider, scripted_chat_model
+    agent_config, fake_vector_store, fake_memory_provider, scripted_chat_model
 ):
     memory = fake_memory_provider()
     model = scripted_chat_model(
@@ -328,7 +246,6 @@ def test_remember_receives_the_whole_thread_not_just_the_latest_turn(
     run_turn(
         agent_config,
         store,
-        approval_config,
         "thread-7",
         "first",
         memory_provider=memory,
@@ -337,7 +254,6 @@ def test_remember_receives_the_whole_thread_not_just_the_latest_turn(
     run_turn(
         agent_config,
         store,
-        approval_config,
         "thread-7",
         "second",
         memory_provider=memory,
@@ -355,12 +271,12 @@ def test_remember_receives_the_whole_thread_not_just_the_latest_turn(
 
 
 def test_no_memory_provider_means_no_remember_calls(
-    agent_config, approval_config, fake_vector_store, scripted_chat_model
+    agent_config, fake_vector_store, scripted_chat_model
 ):
     model = scripted_chat_model([AIMessage(content="Hello there!")])
 
     result = run_turn(
-        agent_config, fake_vector_store(), approval_config, "thread-8", "hi", chat_model=model
+        agent_config, fake_vector_store(), "thread-8", "hi", chat_model=model
     )
 
     assert result.reply == "Hello there!"  # no memory_provider given - nothing to assert beyond
@@ -368,7 +284,7 @@ def test_no_memory_provider_means_no_remember_calls(
 
 
 def test_get_current_datetime_tool_is_always_available(
-    agent_config, approval_config, fake_vector_store, scripted_chat_model
+    agent_config, fake_vector_store, scripted_chat_model
 ):
     """Unlike search_memory/list_deadlines/search_web, get_current_datetime needs no optional
     collaborator - it should work even when every other new capability is left at its default."""
@@ -383,7 +299,7 @@ def test_get_current_datetime_tool_is_always_available(
     )
 
     result = run_turn(
-        agent_config, fake_vector_store(), approval_config, "thread-9", "what day is it?",
+        agent_config, fake_vector_store(), "thread-9", "what day is it?",
         chat_model=model,
     )
 
@@ -391,7 +307,7 @@ def test_get_current_datetime_tool_is_always_available(
 
 
 def test_list_deadlines_tool_is_used_when_pm_config_is_given(
-    agent_config, approval_config, fake_vector_store, pm_config, scripted_chat_model
+    agent_config, fake_vector_store, pm_config, scripted_chat_model
 ):
     pm_config.vault_root.mkdir(parents=True)
     (pm_config.vault_root / "Report.md").write_text(
@@ -410,7 +326,6 @@ def test_list_deadlines_tool_is_used_when_pm_config_is_given(
     result = run_turn(
         agent_config,
         fake_vector_store(),
-        approval_config,
         "thread-10",
         "any close deadlines?",
         pm_config=pm_config,
@@ -423,19 +338,19 @@ def test_list_deadlines_tool_is_used_when_pm_config_is_given(
 
 
 def test_no_pm_config_means_no_list_deadlines_tool(
-    agent_config, approval_config, fake_vector_store, scripted_chat_model
+    agent_config, fake_vector_store, scripted_chat_model
 ):
     model = scripted_chat_model([AIMessage(content="Hello there!")])
 
     result = run_turn(
-        agent_config, fake_vector_store(), approval_config, "thread-11", "hi", chat_model=model
+        agent_config, fake_vector_store(), "thread-11", "hi", chat_model=model
     )
 
     assert result.reply == "Hello there!"
 
 
 def test_search_web_tool_is_used_when_web_search_is_given(
-    agent_config, approval_config, fake_vector_store, fake_web_search, scripted_chat_model
+    agent_config, fake_vector_store, fake_web_search, scripted_chat_model
 ):
     from kathrena.agent_core.web_search import SearchHit
 
@@ -455,7 +370,6 @@ def test_search_web_tool_is_used_when_web_search_is_given(
     result = run_turn(
         agent_config,
         fake_vector_store(),
-        approval_config,
         "thread-12",
         "what's new with foo?",
         web_search=web_search,
@@ -467,12 +381,12 @@ def test_search_web_tool_is_used_when_web_search_is_given(
 
 
 def test_no_web_search_means_no_search_web_tool(
-    agent_config, approval_config, fake_vector_store, scripted_chat_model
+    agent_config, fake_vector_store, scripted_chat_model
 ):
     model = scripted_chat_model([AIMessage(content="Hello there!")])
 
     result = run_turn(
-        agent_config, fake_vector_store(), approval_config, "thread-13", "hi", chat_model=model
+        agent_config, fake_vector_store(), "thread-13", "hi", chat_model=model
     )
 
     assert result.reply == "Hello there!"

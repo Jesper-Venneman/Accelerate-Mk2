@@ -2,11 +2,11 @@
 
 Design spec: Architecture/Modules/G - Kathrena Agent Core.md
 
-Independent from every other module's config (`kathrena.rag_index.config.RagIndexConfig`,
-`kathrena.approval_gate.config.ApprovalGateConfig`, `kathrena.config.PipelineConfig`) - they only
-agree on the shared "common" settings section, not shared code. `tool_profile`/`reply_profile`
-each name an entry in `data/settings.yaml`'s `llm_profiles` section (see `kathrena.llm`),
-independent from every other role's own profile choice (Decisions Log Round 27/28).
+Independent from every other module's config (`kathrena.rag_index.config.RagIndexConfig`, 
+`kathrena.config.PipelineConfig`) - they only agree on the shared "common" settings
+section, not shared code. `tool_profile`/`reply_profile` each name an entry in
+`data/settings.yaml`'s `llm_profiles` section (see `kathrena.llm`), independent from every
+other role's own profile choice (Decisions Log Round 27/28).
 """
 
 from __future__ import annotations

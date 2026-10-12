@@ -8,7 +8,6 @@ from kathrena.agent_core.tools import (
     build_change_setting_tool,
     build_current_datetime_tool,
     build_list_deadlines_tool,
-    build_propose_vault_change_tool,
     build_read_vault_file_tool,
     build_search_memory_tool,
     build_search_vault_tool,
@@ -16,7 +15,6 @@ from kathrena.agent_core.tools import (
     build_web_search_tool,
 )
 from kathrena.agent_core.web_search import SearchHit
-from kathrena.approval_gate import PendingReview, get_pending_review
 from kathrena.rag_index.vector_store import SearchResult
 from kathrena.settings import get_store
 
@@ -120,19 +118,6 @@ def test_read_vault_file_falls_back_to_full_file_when_near_text_is_not_found(tmp
     result = read_vault_file(path="Foo.md", near_text="text that isn't in the file")
 
     assert result == "actual file contents"
-
-
-# def test_propose_vault_change_stages_a_real_proposal(approval_config): commented out until the propose vault change tool is improved.
-#     propose_vault_change = build_propose_vault_change_tool(approval_config)
-
-#     review = propose_vault_change(
-#         target_path="note.md", new_content="hello", description="test proposal"
-#     )
-
-#     assert isinstance(review, PendingReview)
-#     assert review.target_path == "note.md"
-#     assert review.proposer == "G"
-#     assert get_pending_review(approval_config, review.thread_id) == review
 
 
 def test_search_memory_formats_recalled_memories(fake_memory_provider):

@@ -3,18 +3,14 @@
 Design spec: Architecture/Modules/G - Kathrena Agent Core.md
 
 A hand-rolled ReAct-style loop (call_model -> call_tools -> call_model -> ... -> END), matching
-the explicit-graph style used by `kathrena.rag_index.indexer` and `kathrena.approval_gate.gate`
-rather than `langgraph.prebuilt`'s `create_react_agent`, so the tool-calling loop stays as
-inspectable as the rest of this codebase.
-
-The system prompt encodes the design spec's Personality section directly (tone, disagreement
-style, humor) rather than scattering that behavior across code.
+the explicit-graph style used by `kathrena.rag_index.indexer` rather than `langgraph.prebuilt`'s
+`create_react_agent`, so the tool-calling loop stays as inspectable as the rest of this codebase.
 """
 
 from __future__ import annotations
 
 import operator
-from dataclasses import asdict, dataclass
+from dataclasses import dataclass
 from typing import Annotated, Any, TypedDict
 
 from kathrena.agent_core.config import AgentCoreConfig
@@ -22,7 +18,6 @@ from kathrena.agent_core.tools import (
     build_change_setting_tool,
     build_current_datetime_tool,
     build_list_deadlines_tool,
-    build_propose_vault_change_tool,
     build_read_vault_file_tool,
     build_search_memory_tool,
     build_search_vault_tool,
@@ -30,7 +25,6 @@ from kathrena.agent_core.tools import (
     build_web_search_tool,
 )
 from kathrena.agent_core.web_search import WebSearch
-from kathrena.approval_gate import ApprovalGateConfig, PendingReview
 from kathrena.memory import MemoryProvider
 from kathrena.project_management import ProjectManagementConfig
 from kathrena.rag_index.vector_store import VectorStore
@@ -45,13 +39,6 @@ _TOOLS_SYSTEM_PROMPT_ADDITION = (
     "\"now\", `set_llm_mode` to switch every LLM-using role between local/cloud/standard in one "
     "call (e.g. to free up the GPU), and `change_setting` to change a single one of those "
     "settings instead."
-)
-
-# System prompt additions for tools.
-_PROPOSE_VAULT_CHANGE_PROMPT_ADDITION = (
-    " You also have `propose_vault_change` to draft an edit to a vault note. "
-    "Proposing a change only stages it for the user's review - it never writes "
-    "anything by itself."
 )
 
 # System prompt additions for optional tools.
@@ -71,9 +58,6 @@ _WEB_SEARCH_SYSTEM_PROMPT_ADDITION = (
 
 class AgentState(TypedDict):
     messages: Annotated[list[Any], operator.add]
-    # Reset per-turn by kathrena.agent_core.graph.run_turn's caller, not read from the checkpointed
-    # cumulative total - see run_turn's docstring for why.
-    pending_reviews: Annotated[list[dict], operator.add]
 
 
 @dataclass(frozen=True)
@@ -81,13 +65,11 @@ class TurnResult:
     """What Kathrena said, plus any change she proposed during this specific turn."""
 
     reply: str
-    pending_reviews: list[PendingReview]
 
 
 def build_agent_graph(
     config: AgentCoreConfig,
     vector_store: VectorStore,
-    approval_config: ApprovalGateConfig,
     memory_provider: MemoryProvider | None = None,
     pm_config: ProjectManagementConfig | None = None,
     web_search: WebSearch | None = None,
@@ -103,7 +85,6 @@ def build_agent_graph(
     from langgraph.graph import END, START, StateGraph
 
     system_prompt = config.system_prompt + _TOOLS_SYSTEM_PROMPT_ADDITION
-    # system_prompt += _PROPOSE_VAULT_CHANGE_PROMPT_ADDITION Commented out for now until the propose vault change tool is improved.
 
     # Add the always-available tools... wrapped as proper LangChain tools (not plain functions)
     # so invoking them below goes through the Runnable protocol - that's what lets a callback
@@ -116,8 +97,7 @@ def build_agent_graph(
              # LLM mode switch tool
              _as_tool(build_set_llm_mode_tool()), 
              # Individual setting change tool
-             _as_tool(build_change_setting_tool()), 
-             # _as_tool(build_propose_vault_change_tool(approval_config)) # Propose Vault Change tool -- Commented out until the propose vault change tool is improved.
+             _as_tool(build_change_setting_tool()),
              ]
 
     # Add optional tools based on the provided collaborators...
@@ -168,14 +148,13 @@ def build_agent_graph(
 
     def call_model(state: AgentState, config: RunnableConfig) -> dict:
         response = model_with_tools.invoke(_windowed_prompt(state), config=config)
-        return {"messages": [response], "pending_reviews": []}
+        return {"messages": [response]}
 
     def call_tools(state: AgentState, config: RunnableConfig) -> dict:
         from kathrena.llm_logging import log_tool_call
 
         last = state["messages"][-1]
         tool_messages = []
-        new_reviews = []
         for call in last.tool_calls:
             tool_obj = tools_by_name.get(call["name"])
             if tool_obj is None:
@@ -187,21 +166,17 @@ def build_agent_graph(
                     content = f"Tool error: {exc}"
                     log_tool_call("agent_core", call["name"], call["args"], content)
                 else:
-                    if isinstance(result, PendingReview):
-                        new_reviews.append(asdict(result))
-                        content = f"Proposal staged for review (thread_id={result.thread_id})."
-                    else:
-                        content = str(result)
+                    content = str(result)
                     log_tool_call("agent_core", call["name"], call["args"], result)
             tool_messages.append(ToolMessage(content=content, tool_call_id=call["id"]))
-        return {"messages": tool_messages, "pending_reviews": new_reviews}
+        return {"messages": tool_messages}
 
     def call_reply_model(state: AgentState, config: RunnableConfig) -> dict:
         """Writes the reply actually shown to the user - only present when split is True. The
         tool-model's own last ("no more tools needed") message stays in history for context, but
         is never itself shown; this node's output is the one run_turn surfaces."""
         response = reply_chat_model.invoke(_windowed_prompt(state), config=config)
-        return {"messages": [response], "pending_reviews": []}
+        return {"messages": [response]}
 
     # Check if the last message has tool calls, if so route to the call_tools node; otherwise, end the turn.
     def route(state: AgentState) -> str:
@@ -245,7 +220,6 @@ def load_thread_messages(config: AgentCoreConfig, thread_id: str) -> list[Any]:
 def run_turn(
     config: AgentCoreConfig,
     vector_store: VectorStore,
-    approval_config: ApprovalGateConfig,
     thread_id: str,
     user_text: str,
     memory_provider: MemoryProvider | None = None,
@@ -256,12 +230,6 @@ def run_turn(
     callbacks: list[Any] | None = None,
 ) -> TurnResult:
     """Run one user turn through Kathrena's agent graph, continuing `thread_id`'s prior history.
-
-    Uses `stream_mode="updates"` rather than `invoke()` deliberately: `pending_reviews` has an
-    `operator.add` reducer so `messages` history accumulates correctly across turns via the
-    checkpointer, but that means the *cumulative* state would include every proposal from the
-    whole conversation, not just this turn's. Streaming updates and collecting only what this
-    call's `call_tools` node actually emits sidesteps that without needing a separate mechanism.
 
     If `memory_provider` is given, schedules (debounced) background memory extraction from the
     *full* conversation so far - not part of the graph itself, since memory formation happens
@@ -287,7 +255,6 @@ def run_turn(
         graph = build_agent_graph(
             config,
             vector_store,
-            approval_config,
             memory_provider=memory_provider,
             pm_config=pm_config,
             web_search=web_search,
@@ -297,15 +264,13 @@ def run_turn(
         run_config: RunnableConfig = {"configurable": {"thread_id": thread_id}}
         if callbacks:
             run_config["callbacks"] = callbacks
-        new_review_dicts: list[dict] = []
         last_ai_message = None
         for update in graph.stream(
-            {"messages": [HumanMessage(content=user_text)], "pending_reviews": []},
+            {"messages": [HumanMessage(content=user_text)]},
             config=run_config,
             stream_mode="updates",
         ):
             for node_output in update.values():
-                new_review_dicts.extend(node_output.get("pending_reviews", []))
                 messages = node_output.get("messages")
                 if messages:
                     last_ai_message = messages[-1]
@@ -317,5 +282,4 @@ def run_turn(
             memory_provider.remember(full_history, thread_id)
 
     reply = last_ai_message.text if last_ai_message is not None else ""
-    reviews = [PendingReview(**review) for review in new_review_dicts]
-    return TurnResult(reply=reply, pending_reviews=reviews)
+    return TurnResult(reply=reply)

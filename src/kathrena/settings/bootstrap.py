@@ -28,8 +28,7 @@ def ensure_configured() -> None:
 
     Call this once, before constructing any other module's config, at the top of every real
     entry point - `kathrena.chat_interface.app`, `kathrena.rag_index.__main__`,
-    `kathrena.voice_log.pipeline`. Not `kathrena.approval_gate.__main__`, which deliberately never
-    touches the real vault.
+    `kathrena.voice_log.pipeline`.
     """
     store = get_store()
     # Verify if the settings file already exists.

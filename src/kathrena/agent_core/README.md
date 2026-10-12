@@ -1,10 +1,10 @@
 # Kathrena Agent Core (Module G)
 
 Kathrena's conversational LangGraph agent - a hand-rolled tool-calling loop (`call_model` <->
-`call_tools`) using the same local TextGen LLM as [[E - Refinement and Summarization Module]].
+`call_tools`) using the same local TextGen LLM as Module E (Refinement and Summarization).
 Also includes push-to-talk voice input (`kathrena.agent_core.push_to_talk`) and web search
 (`kathrena.agent_core.web_search`) - see their sections below.
-Long-term memory ([[J - Memory Module]]) is wired in via the optional `memory_provider` param -
+Long-term memory (Module J) is wired in via the optional `memory_provider` param -
 see this file's Tools section below. See `Architecture/Modules/G - Kathrena Agent Core.md` for the
 design spec.
 
@@ -40,18 +40,14 @@ see `src/kathrena/voice_log/README.md` for the shared `.venv` setup.
 
 ```python
 from kathrena.agent_core import AgentCoreConfig, run_turn
-from kathrena.approval_gate import ApprovalGateConfig
 from kathrena.rag_index.config import RagIndexConfig
 from kathrena.rag_index.vector_store import ChromaVectorStore
 
 config = AgentCoreConfig()
 vector_store = ChromaVectorStore(RagIndexConfig())
-approval_config = ApprovalGateConfig()
 
-result = run_turn(config, vector_store, approval_config, thread_id="some-chat-session", user_text="What's the status of Project Foo?")
+result = run_turn(config, vector_store, thread_id="some-chat-session", user_text="What's the status of Project Foo?")
 print(result.reply)
-for review in result.pending_reviews:
-    ...  # show review.diff, then kathrena.approval_gate.resolve_change(...) once approved/rejected
 ```
 
 `kathrena.chat_interface` (Module K) is the actual caller of `run_turn` in practice - see its
@@ -69,12 +65,6 @@ README for the Chainlit app that wires this up to a real chat UI.
   full file, truncated past `AGENT_READ_FILE_MAX_CHARS`. Always available (no optional
   collaborator needed), reads directly off disk via `AgentCoreConfig.vault_root` - deliberately
   ignores the `rag-index: false` opt-out (Decisions Log Round 24).
-- **`propose_vault_change(target_path, new_content, description)`** - stages a
-  `kathrena.approval_gate.ChangeProposal` (Module H) and returns immediately; it never writes
-  anything itself, and never blocks waiting for a decision - the review happens later, out of
-  band (via `kathrena.approval_gate.resolve_change`), driven by Module K's UI. **Currently disabled**
-  (commented out in `build_agent_graph`) - see `Architecture/Further Considerations.md`'s
-  "Disconnect the Approval Gate" note.
 - **`set_llm_mode(mode)`** - switches every LLM-using role (`pipeline`/`agent_core`/`memory`) to a
   named preset in one call: `"local"`, `"cloud"`, or `"standard"` (cloud only for
   `agent_core.reply_profile`, local everywhere else) - see LLM modes below (Decisions Log

@@ -1,9 +1,10 @@
 # Change Proposal and Approval Gate (Module H)
 
-The safety gate: nothing from [[G - Kathrena Agent Core]] or [[I - Project Management Modules]]
-touches the vault without explicit sign-off. Built on LangGraph's `interrupt()`/`Command(resume=...)`
-- a proposed write pauses the graph and persists via a `SqliteSaver` checkpointer, so it survives
-a restart and can be approved whenever you get to it, hours or days later. See
+The safety gate: nothing from Module G (Kathrena Agent Core) or Module I (Project Management
+Modules) touches the vault without explicit sign-off. Built on LangGraph's
+`interrupt()`/`Command(resume=...)` - a proposed write pauses the graph and persists via a
+`SqliteSaver` checkpointer, so it survives a restart and can be approved whenever you get to it,
+hours or days later. See
 `Architecture/Modules/H - Change Proposal and Approval Gate.md` for the design spec.
 
 ## Install
